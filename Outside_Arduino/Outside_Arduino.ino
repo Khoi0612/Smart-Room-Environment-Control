@@ -4,6 +4,7 @@
 #define LIGHTPIN A0
 #define SOUNDPIN 6
 #define DHTPIN 7
+#define MSGINDICATORPIN 2
 
 #define DHTTYPE DHT22
 
@@ -18,6 +19,7 @@ void setup() {
   Serial.begin(9600);
   dht.begin();
   pinMode(SOUNDPIN, INPUT);
+  pinMode(MSGINDICATORPIN, OUTPUT);
 }
 
 void loop() {
@@ -46,6 +48,15 @@ void loop() {
 
     // Reset for the next 3 seconds
     soundDetected = false;
+  }
+
+  if (Serial.available() > 0) {
+    int inputValue = Serial.read();
+    if (inputValue == '0') {
+      digitalWrite(MSGINDICATORPIN, LOW);
+    } else if (inputValue == '1') {
+      digitalWrite(MSGINDICATORPIN, HIGH);
+    }
   }
 }
 
