@@ -29,6 +29,15 @@ const char* tempMsg[] = {
 };
 String screenMessage = defaultMsg; // Initial message to display
 
+// Output actuator state
+bool isLightOn = false;
+bool isFanOn = false;
+bool isDoorOpen = false;
+
+// Timing variables
+unsigned long previousMillis = 0;
+const long updateInterval = 3000; // Interval for sensor reading and display update
+
 void setup() {
   Serial.begin(9600);
 
@@ -55,12 +64,32 @@ void setup() {
 }
 
 void loop() {
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= updateInterval) {
+    previousMillis = currentMillis;
+
+    // Output: Light, Fan, Door status 
+    Serial.print("LightOn:");
+    Serial.print(isLightOn);
+    Serial.print(", FanOn:");
+    Serial.print(isFanOn);    
+    Serial.print(", DoorOpen:");
+    Serial.println(isDoorOpen);
+    // Display the current message on OLED
+    displayMessage(screenMessage);
+  }
+
   if (Serial.available() > 0) {
     int inputValue = Serial.read();
     if (inputValue == '0') { // Default: Everything is fine
       digitalWrite(LEDPIN, LOW);
+      isLightOn = false;
       digitalWrite(MOTORPIN, LOW);
+      isFanOn = false;
       doorServo.write(0);
+      isDoorOpen = false;
       screenMessage = defaultMsg;
     } else if (inputValue == '1') { // Too dark
       screenMessage = lightMsg[0]; 
@@ -74,15 +103,21 @@ void loop() {
     else if (inputValue == '4') { // Too dark
       screenMessage = lightMsg[1]; 
       doorServo.write(0); // close door because outside is dark
+      isDoorOpen = false;
       digitalWrite(LEDPIN, HIGH);
+      isLightOn = true;
     } else if (inputValue == '5') { // Too loud
       screenMessage = noiseMsg[1];
       doorServo.write(0);
+      isDoorOpen = false;
       digitalWrite(MOTORPIN, LOW);
+      isFanOn = false;
     } else if (inputValue == '6') { // Too hot
       screenMessage = tempMsg[1];
       doorServo.write(90); // Door is only opened when too hot
+      isDoorOpen = true;
       digitalWrite(MOTORPIN, HIGH);
+      isFanOn = true;
     }   
   }
   displayMessage(screenMessage);
