@@ -71,12 +71,12 @@ void loop() {
     previousMillis = currentMillis;
 
     // Output: Light, Fan, Door status 
-    Serial.print("LightOn:");
-    Serial.print(isLightOn);
-    Serial.print(", FanOn:");
-    Serial.print(isFanOn);    
-    Serial.print(", DoorOpen:");
-    Serial.println(isDoorOpen);
+    Serial.print("Light: ");
+    Serial.print(isLightOn ? "on" : "off");
+    Serial.print(", Fan: ");
+    Serial.print(isFanOn ? "on" : "off");
+    Serial.print(", Door: ");
+    Serial.println(isDoorOpen ? "open" : "close");
     // Display the current message on OLED
     displayMessage(screenMessage);
   }
