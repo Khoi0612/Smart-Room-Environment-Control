@@ -15,18 +15,10 @@ int displayRows;
 
 // Display messages
 const char* defaultMsg = "Ideal Conditions";
-const char* lightMsg[] = {
-  "Too dark!",
-  "Lighting up"
-};
-const char* noiseMsg[] = {
-  "Too loud!",
-  "Quieting down"
-};
-const char* tempMsg[] = {
-  "Too hot!",
-  "Cooling down"
-};
+const char* lightMsg = "Lighting up";
+const char* noiseMsg = "Quieting down";
+const char* tempMsg = "Cooling down";
+
 String screenMessage = defaultMsg; // Initial message to display
 
 // Set Threshold
@@ -124,28 +116,20 @@ void loop() {
       start = end + 1;
     }
 
-    // Print out parsed values
-    // Serial.println("Parsed Values:");
-    // Serial.print("Sensor: "); Serial.println(sensor);
-    // Serial.print("Temperature: "); Serial.println(temp);
-    // Serial.print("Light: "); Serial.println(light);
-    // Serial.print("Sound: "); Serial.println(sound);
-    // Serial.println("----");
-
     if (light < lightLimit) {
-      screenMessage = lightMsg[1]; 
+      screenMessage = lightMsg; 
       doorServo.write(0); // close door because outside is dark
       isDoorOpen = false;
       digitalWrite(LEDPIN, HIGH);
       isLightOn = true;
     } else if (isLoud == true ) {
-      screenMessage = noiseMsg[1];
+      screenMessage = noiseMsg;
       doorServo.write(0);
       isDoorOpen = false;
       digitalWrite(MOTORPIN, LOW);
       isFanOn = false;
     } else if (temp > tempLimit) {
-      screenMessage = tempMsg[1];
+      screenMessage = tempMsg;
       doorServo.write(90); // Door is only opened when too hot
       isDoorOpen = true;
       digitalWrite(MOTORPIN, HIGH);
@@ -159,44 +143,6 @@ void loop() {
       isDoorOpen = false;
       screenMessage = defaultMsg;
     }
-
-    // int inputValue = Serial.read();
-    // if (inputValue == '0') { // Default: Everything is fine
-    //   digitalWrite(LEDPIN, LOW);
-    //   isLightOn = false;
-    //   digitalWrite(MOTORPIN, LOW);
-    //   isFanOn = false;
-    //   doorServo.write(0);
-    //   isDoorOpen = false;
-    //   screenMessage = defaultMsg;
-    // } else if (inputValue == '1') { // Too dark
-    //   screenMessage = lightMsg[0]; 
-    // } else if (inputValue == '2') { // Too loud
-    //   screenMessage = noiseMsg[0];
-    // } else if (inputValue == '3') { // Too hot
-    //   screenMessage = tempMsg[0];
-    // } 
-    
-    // // After Discord/Telegram Confirmation 
-    // else if (inputValue == '4') { // Too dark
-    //   screenMessage = lightMsg[1]; 
-    //   doorServo.write(0); // close door because outside is dark
-    //   isDoorOpen = false;
-    //   digitalWrite(LEDPIN, HIGH);
-    //   isLightOn = true;
-    // } else if (inputValue == '5') { // Too loud
-    //   screenMessage = noiseMsg[1];
-    //   doorServo.write(0);
-    //   isDoorOpen = false;
-    //   digitalWrite(MOTORPIN, LOW);
-    //   isFanOn = false;
-    // } else if (inputValue == '6') { // Too hot
-    //   screenMessage = tempMsg[1];
-    //   doorServo.write(90); // Door is only opened when too hot
-    //   isDoorOpen = true;
-    //   digitalWrite(MOTORPIN, HIGH);
-    //   isFanOn = true;
-    // }   
   }
   displayMessage(screenMessage);
 }
