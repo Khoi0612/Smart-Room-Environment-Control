@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 import json
 import requests
 
-MQTT_BROKER = "169.254.133.223" # Change to cloud VM server address
+MQTT_BROKER = "169.254.5.59" # Change to cloud VM server address
 MQTT_SUBS_EDGE_TOPIC = "edge/outside/data"
 MQTT_PUBS_CLOUDE_TOPIC = "v1/devices/me/telemetry" # Change to ThingsBoard inside device topic
 MQTT_CLIENT = mqtt.Client()
@@ -94,7 +94,7 @@ def send_discord_alert(message):
     except Exception as e:
         print("Failed to send Discord alert:", e)
 
-def get_db_connection(host='localhost', user='root', password='12345678', db='sensorslog'):
+def get_db_connection(host='localhost', user='root', password='12345678', db='actuatorslog'):
     conn = pymysql.connect(host=host, user=user, password=password, database=db)
     cur = conn.cursor()
     cur.execute('''
