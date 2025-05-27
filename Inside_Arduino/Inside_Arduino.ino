@@ -150,6 +150,14 @@ void loop() {
       isDoorOpen = true;
       digitalWrite(MOTORPIN, HIGH);
       isFanOn = true;
+    } else { // Default: Everything is fine
+      digitalWrite(LEDPIN, LOW);
+      isLightOn = false;
+      digitalWrite(MOTORPIN, LOW);
+      isFanOn = false;
+      doorServo.write(0);
+      isDoorOpen = false;
+      screenMessage = defaultMsg;
     }
 
     // int inputValue = Serial.read();
