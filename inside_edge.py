@@ -9,7 +9,9 @@ import requests
 
 MQTT_BROKER = "169.254.5.59" # Change to cloud VM server address
 MQTT_SUBS_EDGE_TOPIC = "edge/outside/data"
-MQTT_PUBS_CLOUDE_TOPIC = "v1/devices/me/telemetry" # Change to ThingsBoard inside device topic
+MQTT_PUBS_EDGE_TOPIC = "edge/outside/status"
+MQTT_SUBS_CLOUD_TOPIC = "cloud/control/mode"
+MQTT_PUBS_CLOUD_TOPIC = "v1/devices/me/telemetry" # Change to ThingsBoard inside device topic
 MQTT_CLIENT = mqtt.Client()
 MQTT_CLIENT.connect(MQTT_BROKER, 1883, 60)
 
@@ -39,7 +41,7 @@ def on_message(client, userdata, msg):
             sound = payload["sound"]
             send_to_arduino(f"sensor:outside,temp:{temp},light:{light},sound:{sound}")
 
-        elif topic == "cloud/control/mode":
+        elif topic == MQTT_SUBS_CLOUD_TOPIC:
             payload = json.loads(payload_str)
             new_mode = payload.get("value", "").lower()
             if new_mode in ["auto", "manual"]:
@@ -113,31 +115,42 @@ def log_data():
     while True:
         try:
             if arduino.in_waiting:
-                line = arduino.readline().decode().strip()
-                parts = line.split(',')
-                light = int(parts[0].split(':')[1])
-                fan = parts[1].split(':')[1]
-                door = parts[2].split(':')[1]
-                control = parts[3].split(':')[1]
-                now = datetime.now()
-                
-                conn = get_db_connection()  
-                cur = conn.cursor()
-                cur.execute("INSERT INTO logs (time, light, fan, door, control) VALUES (%s, %s, %s, %s, %s)",
-                            (now, light, fan, door, control))
-                conn.commit()
-                conn.close()
+                msg = arduino.readline().decode().strip()
+                if msg.startswith("ACTUATORS|"):
+                    parts = msg.split(',')
+                    light = int(parts[0].split(':')[1])
+                    fan = parts[1].split(':')[1]
+                    door = parts[2].split(':')[1]
+                    control = parts[3].split(':')[1]
+                    now = datetime.now()
+                    
+                    conn = get_db_connection()  
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO logs (time, light, fan, door, control) VALUES (%s, %s, %s, %s, %s)",
+                                (now, light, fan, door, control))
+                    conn.commit()
+                    conn.close()
 
-                # Prepare payload and publish to MQTT
-                payload = json.dumps({
-                    "timestamp": now.isoformat(),
-                    "light": light,
-                    "fan": fan,
-                    "door": door,
-                    "control": control
-                })
-                MQTT_CLIENT.publish(MQTT_PUBS_CLOUDE_TOPIC, payload)
-                print(f"[INFO] Published: {payload} to {MQTT_PUBS_CLOUDE_TOPIC}")
+                    # Prepare payload and publish to MQTT
+                    payload = json.dumps({
+                        "timestamp": now.isoformat(),
+                        "light": light,
+                        "fan": fan,
+                        "door": door,
+                        "control": control
+                    })
+                    MQTT_CLIENT.publish(MQTT_PUBS_CLOUD_TOPIC, payload)
+                    print(f"[INFO] Published: {payload} to {MQTT_PUBS_CLOUD_TOPIC}")
+                    
+                elif msg.startswith("SENSORS|"):
+                    parts = msg.split(',')
+                    ack = parts[0].split(':')[1]
+                    # Prepare payload and publish to MQTT
+                    payload = json.dumps({
+                        "sensors": ack
+                    })
+                    MQTT_CLIENT.publish(MQTT_PUBS_EDGE_TOPIC, payload)
+                    print(f"[INFO] Published: {payload} to {MQTT_PUBS_EDGE_TOPIC}")
                              
         except Exception as e:
             print("Error reading from Arduino:", e)
@@ -145,6 +158,13 @@ def log_data():
 
 MQTT_CLIENT.on_message = on_message
 MQTT_CLIENT.on_connect = on_connect
-MQTT_CLIENT.loop_forever()
+MQTT_CLIENT.loop_start()
 
 threading.Thread(target=log_data, daemon=True).start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    MQTT_CLIENT.loop_stop()
+    MQTT_CLIENT.disconnect()

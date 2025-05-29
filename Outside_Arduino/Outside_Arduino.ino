@@ -8,10 +8,14 @@
 
 #define DHTTYPE DHT22
 
+bool soundDetected = false;
+
+// Input Serial Variables
+String input = "";
+
+// Timing variables
 unsigned long previousMillis = 0;
 const long updateInterval = 3000; // Interval for sensor reading and display update
-
-bool soundDetected = false;
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -50,13 +54,19 @@ void loop() {
     soundDetected = false;
   }
 
+  // Receive acknowledgement from inside
   if (Serial.available() > 0) {
-    int inputValue = Serial.read();
-    if (inputValue == '0') {
-      digitalWrite(MSGINDICATORPIN, LOW);
-    } else if (inputValue == '1') {
-      digitalWrite(MSGINDICATORPIN, HIGH);
-    }
+    input = Serial.readStringUntil('\n');
+    if (input.startsWith("status:")) {
+      String ackValue = incomingMsg.substring(7);
+      ackValue.trim();
+
+      if (ackValue == "active") {
+        digitalWrite(MSGINDICATORPIN, HIGH);
+      } else if (ackValue == "inactive") {
+        digitalWrite(MSGINDICATORPIN, LOW);
+      }
+    }    
   }
 }
 

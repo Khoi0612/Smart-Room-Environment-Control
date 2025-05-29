@@ -87,4 +87,40 @@ def send_discord_alert(message):
     except Exception as e:
         print("[Error] Failed to send Discord alert:", e)
 
+def on_connect(client, userdata, flags, rc):
+    print(f"[MQTT] Connected with result code {rc}")
+    client.subscribe("edge/outside/status")
+
+def on_message(client, userdata, msg):
+    topic = msg.topic
+    payload_str = msg.payload.decode()
+    print(f"[MQTT] Message received: {topic} -> {payload_str}")
+
+    try:
+        payload = json.loads(payload_str)
+        ack = payload["sensors"]
+        send_to_arduino(f"status:{ack}")
+            
+
+    except Exception as e:
+        print("[Error] on_message:", e)
+
+def send_to_arduino(message: str):
+    try:
+        arduino.write((message + '\n').encode())
+        print(f"[Serial] Sent to Arduino: {message}")
+    except Exception as e:
+        print("[Error] Sending to Arduino:", e)
+
+MQTT_CLIENT.on_message = on_message
+MQTT_CLIENT.on_connect = on_connect
+MQTT_CLIENT.loop_start()
+
 threading.Thread(target=log_and_publish_data, daemon=True).start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    MQTT_CLIENT.loop_stop()
+    MQTT_CLIENT.disconnect()

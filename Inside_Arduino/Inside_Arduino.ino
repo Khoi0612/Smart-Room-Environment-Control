@@ -25,6 +25,9 @@ String screenMessage = defaultMsg; // Initial message to display
 int lightLimit = 1000;
 float tempLimit = 30.0;
 
+// ACK variable
+bool ack = false;
+
 // Output actuator state
 bool isLightOn = false;
 bool isFanOn = false;
@@ -82,8 +85,9 @@ void loop() {
     previousMillis = currentMillis;
 
     // Output: Light, Fan, Door status 
-    Serial.print("Control: ")
-    Serial.print(isManualMode ? "manual", "auto")
+    Serial.print("ACTUATORS|"); // Actuator header
+    Serial.print("Control: ");
+    Serial.print(isManualMode ? "manual", "auto");
     Serial.print("Light: ");
     Serial.print(isLightOn ? "on" : "off");
     Serial.print(", Fan: ");
@@ -96,6 +100,11 @@ void loop() {
   }
 
   if (Serial.available() > 0) {
+    // Acknowledge data being received from outside
+    ack = true;
+    Serial.print("SENSORS|"); // Sensor header
+    Serial.print("status: ");
+    Serial.println(ack ? "active" : "inactive");
     input = Serial.readStringUntil('\n'); // Read until newline (from Python or Serial Monitor)
 
     // Trim leading/trailing whitespace
