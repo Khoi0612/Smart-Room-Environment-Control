@@ -29,10 +29,16 @@ float tempLimit = 30.0;
 bool isLightOn = false;
 bool isFanOn = false;
 bool isDoorOpen = false;
-bool controlMode = false;
+bool isManualMode = false;
 
-// Ouside Arduino Variables
+// Commands Serial Variables
+bool ledOn = false;
+bool doorOpen = false;
+bool fanOn = false;
+
+// Input Serial Variables
 String input = "";
+
 String sensor = "";
 float temp = 0.0;
 int light = 0;
@@ -76,14 +82,15 @@ void loop() {
     previousMillis = currentMillis;
 
     // Output: Light, Fan, Door status 
+    Serial.print("Control: ")
+    Serial.print(isManualMode ? "manual", "auto")
     Serial.print("Light: ");
     Serial.print(isLightOn ? "on" : "off");
     Serial.print(", Fan: ");
     Serial.print(isFanOn ? "on" : "off");
     Serial.print(", Door: ");
-    Serial.print(isDoorOpen ? "open" : "close");
-    Serial.print(", Control: ")
-    Serial.println(controlMode ? "manual", "auto")
+    Serial.println(isDoorOpen ? "open" : "close");
+    
     // Display the current message on OLED
     displayMessage(screenMessage);
   }
@@ -91,58 +98,55 @@ void loop() {
   if (Serial.available() > 0) {
     input = Serial.readStringUntil('\n'); // Read until newline (from Python or Serial Monitor)
 
-    // Parse the input string
-    int start = 0;
-    while (start < input.length()) {
-      int end = input.indexOf(',', start);
-      if (end == -1) end = input.length();
-      String pair = input.substring(start, end);
+    // Trim leading/trailing whitespace
+    input.trim();
 
-      int sep = pair.indexOf(':');
-      if (sep != -1) {
-        String key = pair.substring(0, sep);
-        String value = pair.substring(sep + 1);
+    // Determine input type by checking prefix
+    if (input.startsWith("sensor:")) {
+      parseSensorData(input);
+    } else if (input.startsWith("led:")) {
+      ledOn = (input.substring(4) == "on");
+    } else if (input.startsWith("door:")) {
+      doorOpen = (input.substring(5) == "open");
+    } else if (input.startsWith("fan:")) {
+      fanOn = (input.substring(4) == "on");
+    } else if (input.startsWith("mode:")) {
+      isManualMode = (input.substring(5) == "manual");
+    } 
 
-        // Match key and assign
-        if (key == "sensor") sensor = value;
-        else if (key == "temp") temp = value.toFloat();
-        else if (key == "light") light = value.toInt();
-        else if (key == "sound") {
-          sound = value;
-          bool isLoud = (value == "Yes"); // Converts "Yes" to true, "No" to false
-        }
+    if (!isManualMode) {
+      if (light < lightLimit) { // Too Dark
+        screenMessage = lightMsg; 
+        doorServo.write(0); // close door because outside is dark
+        isDoorOpen = false;
+        digitalWrite(LEDPIN, HIGH);
+        isLightOn = true;
+      } else if (isLoud == true ) { // Too loud
+        screenMessage = noiseMsg;
+        doorServo.write(0);
+        isDoorOpen = false;
+        digitalWrite(MOTORPIN, LOW);
+        isFanOn = false;
+      } else if (temp > tempLimit) { // Too Hot
+        screenMessage = tempMsg;
+        doorServo.write(90); // Door is only opened when too hot
+        isDoorOpen = true;
+        digitalWrite(MOTORPIN, HIGH);
+        isFanOn = true;
+      } else { // Default: Everything is fine
+        digitalWrite(LEDPIN, LOW);
+        isLightOn = false;
+        digitalWrite(MOTORPIN, LOW);
+        isFanOn = false;
+        doorServo.write(0);
+        isDoorOpen = false;
+        screenMessage = defaultMsg;
       }
-
-      start = end + 1;
     }
 
-    if (light < lightLimit) {
-      screenMessage = lightMsg; 
-      doorServo.write(0); // close door because outside is dark
-      isDoorOpen = false;
-      digitalWrite(LEDPIN, HIGH);
-      isLightOn = true;
-    } else if (isLoud == true ) {
-      screenMessage = noiseMsg;
-      doorServo.write(0);
-      isDoorOpen = false;
-      digitalWrite(MOTORPIN, LOW);
-      isFanOn = false;
-    } else if (temp > tempLimit) {
-      screenMessage = tempMsg;
-      doorServo.write(90); // Door is only opened when too hot
-      isDoorOpen = true;
-      digitalWrite(MOTORPIN, HIGH);
-      isFanOn = true;
-    } else { // Default: Everything is fine
-      digitalWrite(LEDPIN, LOW);
-      isLightOn = false;
-      digitalWrite(MOTORPIN, LOW);
-      isFanOn = false;
-      doorServo.write(0);
-      isDoorOpen = false;
-      screenMessage = defaultMsg;
-    }
+    digitalWrite(LEDPIN, ledOn ? HIGH : LOW);
+    digitalWrite(MOTORPIN, fanOn ? HIGH : LOW);
+    doorServo.write(doorOpen ? 90 : 0);
   }
   displayMessage(screenMessage);
 }
@@ -160,6 +164,31 @@ void displayMessage(String message) {
     oledDisplay.print(message);
     
     previousMessage = message; // Store the current message
+  }
+}
+
+void parseSensorData(String data) {
+  // Example: "sensor:outside,temp:30,light:400,sound:yes"
+  int start = 0;
+
+  while (start < data.length()) {
+    int end = data.indexOf(',', start);
+    if (end == -1) end = data.length();
+
+    String pair = data.substring(start, end);
+    int sep = pair.indexOf(':');
+
+    if (sep != -1) {
+      String key = pair.substring(0, sep);
+      String value = pair.substring(sep + 1);
+
+      if (key == "sensor") sensor = value;
+      else if (key == "temp") temp = value.toFloat();
+      else if (key == "light") light = value.toInt();
+      else if (key == "sound") isLoud = (value == "yes");
+    }
+
+    start = end + 1;
   }
 }
 
