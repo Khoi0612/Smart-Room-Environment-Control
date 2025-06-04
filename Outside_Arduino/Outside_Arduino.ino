@@ -1,27 +1,35 @@
 #include <DHT.h>
 
-// Define Pins
+// ========== PIN DEFINITIONS ==========
 #define LIGHTPIN A0
 #define SOUNDPIN 6
 #define DHTPIN 7
 #define MSGINDICATORPIN 2
 
+// ========== SENSOR CONFIGURATION ==========
 #define DHTTYPE DHT22
 
-bool soundDetected = false;
-
-// Input Serial Variables
-String input = "";
-
-// Timing variables
-unsigned long previousMillis = 0;
-const long updateInterval = 3000; // Interval for sensor reading and display update
-
+// ========== SENSOR OBJECTS ==========
 DHT dht(DHTPIN, DHTTYPE);
 
+// ========== STATUS VARIABLES ==========
+bool soundDetected = false;
+
+// ========== COMMUNICATION VARIABLES ==========
+String input = "";
+
+// ========== TIMING CONTROL ==========
+unsigned long previousMillis = 0;
+const long updateInterval = 3000; // Sensor reading interval (3 seconds)
+
 void setup() {
+  // Initialize serial communication at 9600 baud
   Serial.begin(9600);
+
+  // Initialize DHT sensor
   dht.begin();
+
+  // Configure digital pins
   pinMode(SOUNDPIN, INPUT);
   pinMode(MSGINDICATORPIN, OUTPUT);
 }
@@ -29,20 +37,28 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
-  // Check sound continuously (if sound is detected within 3 second interval = true)
+  // ========== CONTINUOUS SOUND MONITORING ==========
+  // Check for sound detection continuously
+  // If sound is detected at any point during the 3-second interval,
+  // the soundDetected flag will be set to true
   if (digitalRead(SOUNDPIN) == LOW) {
     soundDetected = true;
   }
 
-  // Every 3 seconds, print the result
+  // ========== PERIODIC SENSOR READING & TRANSMISSION ==========
+  // Every 3 seconds, read all sensors and transmit data
   if (currentMillis - previousMillis >= updateInterval) {
     previousMillis = currentMillis;
 
+    // ========== SENSOR READINGS ==========
+    // Read light sensor and convert to lux
     int lux = calculateLux(analogRead(LIGHTPIN));
-    int temperature = round(dht.readTemperature());
-    // float temperature = dht.readTemperature();
 
-    // Output
+    // Read temperature from DHT22 sensor
+    int temperature = round(dht.readTemperature());
+
+    // ========== DATA TRANSMISSION ==========
+    // Send sensor data in comma-separated format
     Serial.print("Light:");
     Serial.print(lux);
     Serial.print(", Sound:");
@@ -50,28 +66,35 @@ void loop() {
     Serial.print(", Temperature:");
     Serial.println(temperature);
 
-    // Reset for the next 3 seconds
+    // ========== RESET FLAGS ==========
+    // Reset sound detection flag for next interval
     soundDetected = false;
   }
 
-  // Receive acknowledgement from inside
+  // ========== ACKNOWLEDGMENT HANDLING ==========
+  // Check for incoming acknowledgment from indoor unit
   if (Serial.available() > 0) {
     input = Serial.readStringUntil('\n');
-    if (input.startsWith("status:")) {
-      String ackValue = incomingMsg.substring(7);
-      ackValue.trim();
+    input.trim(); // Remove whitespace
 
+    // Parse acknowledgment status
+    if (input.startsWith("status:")) {
+      String ackValue = input.substring(7);
+      ackValue.trim(); // Remove whitespace
+
+      // Control indicator LED based on acknowledgment
       if (ackValue == "active") {
-        digitalWrite(MSGINDICATORPIN, HIGH);
+        digitalWrite(MSGINDICATORPIN, HIGH); // Turn on LED (message received)
       } else if (ackValue == "inactive") {
-        digitalWrite(MSGINDICATORPIN, LOW);
+        digitalWrite(MSGINDICATORPIN, LOW); // Turn off LED
       }
     }    
   }
 }
 
-// Function to calculate the LUX based on analog values (0 - 1023)
+// ========== LUX CALCULATION FUNCTION ==========
 int calculateLux(int analogValue) {
+  // Linear conversion: map 0-1023 to 0-6000 lux
   float lux = analogValue * (6000.0 / 1023.0); 
-  return round(lux);
+  return round(lux); // Return rounded integer value
 }

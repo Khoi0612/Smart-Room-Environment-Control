@@ -1,188 +1,223 @@
 #include <U8x8lib.h>
 #include <Servo.h>
 
-// Define Pins
+// ========== PIN DEFINITIONS ==========
 #define LEDPIN 3
 #define MOTORPIN 4
 #define SERVOPIN 9
 
+// ========== HARDWARE OBJECTS ==========
 Servo doorServo;
 
-// OLED setup
+// OLED Display Setup (Software I2C)
 U8X8_SSD1306_128X64_NONAME_SW_I2C oledDisplay(SCL, SDA, U8X8_PIN_NONE);
 int displayCols;
 int displayRows;
 
-// Display messages
+// ========== DISPLAY MESSAGES ==========
 const char* defaultMsg = "Ideal Conditions";
-const char* lightMsg = "Lighting up";
-const char* noiseMsg = "Quieting down";
-const char* tempMsg = "Cooling down";
+const char* lightMsg = "Turning on LED";
+const char* fanMsg = "Turning on fan";
+const char* doorMsg = "Open Door";
 
-String screenMessage = defaultMsg; // Initial message to display
+String screenMessage = defaultMsg; // Current message to display
 
-// Set Threshold
-int lightLimit = 1000;
+// ========== CONTROL THRESHOLDS ==========
+int lightLimit = 800;
 float tempLimit = 30.0;
 
-// ACK variable
+// ========== SYSTEM STATUS VARIABLES ==========
 bool ack = false;
+bool isManualMode = false;
 
-// Output actuator state
+// Actuator States
 bool isLightOn = false;
 bool isFanOn = false;
 bool isDoorOpen = false;
-bool isManualMode = false;
 
-// Commands Serial Variables
-bool ledOn = false;
-bool doorOpen = false;
-bool fanOn = false;
-
-// Input Serial Variables
+// ========== SENSOR DATA VARIABLES ==========
 String input = "";
-
 String sensor = "";
 float temp = 0.0;
 int light = 0;
 String sound = "";
 bool isLoud = false;
 
-// Timing variables
+// ========== TIMING CONTROL ==========
 unsigned long previousMillis = 0;
-const long updateInterval = 3000; // Interval for sensor reading and display update
+const long updateInterval = 3000; // Update interval in milliseconds (3 seconds)
 
 void setup() {
+  // Initialize serial communication
   Serial.begin(9600);
 
+  // Configure digital pins
   pinMode(LEDPIN, OUTPUT);
   pinMode(MOTORPIN, OUTPUT); // Fan
 
-  // OLED initialization
+  // Initialize OLED display
   oledDisplay.begin();
   oledDisplay.setFont(u8x8_font_amstrad_cpc_extended_f);
   oledDisplay.clear();
 
+  // Get display dimensions
   displayCols = oledDisplay.getCols();
   displayRows = oledDisplay.getRows();
 
+  // Show initial setup information
   oledDisplay.setCursor(0, 0);
   oledDisplay.print("Cols: " + String(displayCols));
   oledDisplay.setCursor(0, 1);
   oledDisplay.print("Rows: " + String(displayRows));
 
+  // Initialize servo to closed position
   doorServo.attach(SERVOPIN);
   doorServo.write(0);  // Door closed
 
-  delay(2000); // Wait to show setup info
+  delay(2000); // Display setup info for 2 seconds
 }
 
 void loop() {
-
   unsigned long currentMillis = millis();
 
+  // ========== PERIODIC STATUS OUTPUT ==========
+  // Send actuator status every 3 seconds
   if (currentMillis - previousMillis >= updateInterval) {
     previousMillis = currentMillis;
 
-    // Output: Light, Fan, Door status 
+    // Send actuator status via serial
     Serial.print("ACTUATORS|"); // Actuator header
-    Serial.print("Control: ");
-    Serial.print(isManualMode ? "manual", "auto");
-    Serial.print("Light: ");
+    Serial.print("Mode: ");
+    Serial.print(isManualMode ? "manual" : "auto");
+    Serial.print(", Light: ");
     Serial.print(isLightOn ? "on" : "off");
     Serial.print(", Fan: ");
     Serial.print(isFanOn ? "on" : "off");
     Serial.print(", Door: ");
     Serial.println(isDoorOpen ? "open" : "close");
     
-    // Display the current message on OLED
+    // Update OLED display
     displayMessage(screenMessage);
   }
 
+  // ========== SERIAL COMMUNICATION HANDLING ==========
   if (Serial.available() > 0) {
-    // Acknowledge data being received from outside
+    // Acknowledge receipt of data
     ack = true;
     Serial.print("SENSORS|"); // Sensor header
     Serial.print("status: ");
     Serial.println(ack ? "active" : "inactive");
-    input = Serial.readStringUntil('\n'); // Read until newline (from Python or Serial Monitor)
 
-    // Trim leading/trailing whitespace
-    input.trim();
+    // Read incoming data
+    input = Serial.readStringUntil('\n');
+    input.trim(); // Remove whitespace
 
-    // Determine input type by checking prefix
+    // ========== COMMAND PARSING ==========
+    // Parse different types of incoming commands
     if (input.startsWith("sensor:")) {
+      // Process sensor data from outdoor unit
       parseSensorData(input);
+
     } else if (input.startsWith("led:")) {
-      ledOn = (input.substring(4) == "on");
+      // Manual LED control
+      isLightOn = (input.substring(4) == "on");
+
     } else if (input.startsWith("door:")) {
-      doorOpen = (input.substring(5) == "open");
+      // Manual door control
+      isDoorOpen = (input.substring(5) == "open");
+
     } else if (input.startsWith("fan:")) {
-      fanOn = (input.substring(4) == "on");
+      // Manual fan control
+      isFanOn = (input.substring(4) == "on");
+
     } else if (input.startsWith("mode:")) {
+      // Switch between manual and automatic mode
       isManualMode = (input.substring(5) == "manual");
+
+    } else if (input.startsWith("threshold:")) {
+      // Update temperature threshold
+      String valueStr = input.substring(10);
+      float valueFloat = valueStr.toFloat();
+      tempLimit = round(valueFloat);
     } 
 
+    // ========== AUTOMATIC CONTROL LOGIC ==========
     if (!isManualMode) {
-      if (light < lightLimit) { // Too Dark
-        screenMessage = lightMsg; 
-        doorServo.write(0); // close door because outside is dark
-        isDoorOpen = false;
-        digitalWrite(LEDPIN, HIGH);
-        isLightOn = true;
-      } else if (isLoud == true ) { // Too loud
-        screenMessage = noiseMsg;
-        doorServo.write(0);
-        isDoorOpen = false;
-        digitalWrite(MOTORPIN, LOW);
-        isFanOn = false;
-      } else if (temp > tempLimit) { // Too Hot
-        screenMessage = tempMsg;
-        doorServo.write(90); // Door is only opened when too hot
-        isDoorOpen = true;
-        digitalWrite(MOTORPIN, HIGH);
-        isFanOn = true;
-      } else { // Default: Everything is fine
-        digitalWrite(LEDPIN, LOW);
-        isLightOn = false;
-        digitalWrite(MOTORPIN, LOW);
-        isFanOn = false;
-        doorServo.write(0);
-        isDoorOpen = false;
+      // Reset all actuator states
+      isLightOn = false;
+      isFanOn = false;
+      isDoorOpen = false;
+      screenMessage = "";
+
+      // Evaluate environmental conditions
+      bool isDay = light > lightLimit;
+      bool isHot = temp > tempLimit;
+
+      // LIGHTING CONTROL: Turn on LED when it's dark
+      isLightOn = !isDay;
+
+      // FAN CONTROL: Turn on fan when it's hot
+      isFanOn = isHot;
+
+      // DOOR CONTROL: Open door when conditions are favorable
+      // Door opens when: quiet AND (daylight + cool OR nighttime)
+      isDoorOpen = !isLoud && ((isDay && !isHot) || !isDay);
+
+      // ========== DISPLAY MESSAGE LOGIC ==========
+      // Determine what message to show based on active systems
+      if (!isLightOn && !isFanOn && !isDoorOpen) {
         screenMessage = defaultMsg;
+      } else {
+        // Priority: Light > Fan > Door (only show one message)
+        if (isLightOn) screenMessage = lightMsg; 
+        if (isFanOn) screenMessage = fanMsg;
+        if (isDoorOpen) screenMessage = doorMsg;
+        Serial.println();
       }
     }
 
-    digitalWrite(LEDPIN, ledOn ? HIGH : LOW);
-    digitalWrite(MOTORPIN, fanOn ? HIGH : LOW);
-    doorServo.write(doorOpen ? 90 : 0);
+    // ========== ACTUATOR CONTROL ==========
+    // Apply the determined states to physical outputs
+    digitalWrite(LEDPIN, isLightOn ? HIGH : LOW);
+    digitalWrite(MOTORPIN, isFanOn ? HIGH : LOW);
+    doorServo.write(isDoorOpen ? 90 : 0); // 90° = open, 0° = closed
   }
+
+  // Update display continuously (function handles change detection)
   displayMessage(screenMessage);
 }
 
-// Function to display a message on the OLED screen
+// ========== DISPLAY MESSAGE FUNCTION ==========
+// Updates the OLED display only when the message changes to avoid flicker. 
+// Centers the message both horizontally and vertically on the display.
 void displayMessage(String message) {
-  static String previousMessage = ""; // Remember the last shown message
+  static String previousMessage = ""; // Store last displayed message
 
-  // Only update the display if the message has changed
+  // Only update display if message has changed (reduces flicker)
   if (message != previousMessage) {
     oledDisplay.clear();
-    int messageCol = (displayCols - message.length()) / 2; // Center the message
-    int messageRow = displayRows / 2; // Vertically center the message
+
+    // Calculate centered position
+    int messageCol = (displayCols - message.length()) / 2; // Horizontal center
+    int messageRow = displayRows / 2; // Vertical center
+
+    // Ensure cursor position is not negative
     oledDisplay.setCursor(max(0, messageCol), messageRow);
     oledDisplay.print(message);
     
-    previousMessage = message; // Store the current message
+    previousMessage = message;  // Remember current message
   }
 }
 
+// ========== SENSOR DATA PARSER ==========
+// Parses incoming sensor data string in format: "sensor:outside,temp:30,light:400,sound:Yes"
 void parseSensorData(String data) {
-  // Example: "sensor:outside,temp:30,light:400,sound:yes"
   int start = 0;
 
+  // Parse comma-separated key:value pairs
   while (start < data.length()) {
     int end = data.indexOf(',', start);
-    if (end == -1) end = data.length();
+    if (end == -1) end = data.length(); // Handle last pair
 
     String pair = data.substring(start, end);
     int sep = pair.indexOf(':');
@@ -191,13 +226,13 @@ void parseSensorData(String data) {
       String key = pair.substring(0, sep);
       String value = pair.substring(sep + 1);
 
+      // Assign values based on key
       if (key == "sensor") sensor = value;
       else if (key == "temp") temp = value.toFloat();
       else if (key == "light") light = value.toInt();
-      else if (key == "sound") isLoud = (value == "yes");
+      else if (key == "sound") isLoud = (value == "Yes");
     }
 
-    start = end + 1;
+    start = end + 1; // Move to next pair
   }
 }
-
